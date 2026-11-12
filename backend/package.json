@@ -1,0 +1,20 @@
+{
+  "name": "backend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "eslint": "^9.39.0",
+    "globals": "^16.5.0"
+  }
+}
