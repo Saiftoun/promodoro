@@ -1,4 +1,4 @@
-# Timer state machine and presets (PROM-15, PROM-17)
+# Timer state machine and presets (PROM-15, PROM-17, PROM-61)
 
 Plain ES modules, zero dependencies. The same logic can run in the frontend and
 later on the backend (the authority for the timer). No presets, no UI, no
@@ -14,6 +14,8 @@ sounds, no network code — only the phase state machine.
   paused: false,            // true while paused
   remainingWhenPaused: null,// ms left in the phase at the moment it was paused
   cycleCount: 0,            // completed focus periods since the last long break
+  longBreaksCompleted: 0,   // completed cycles (a cycle ends with a long break)
+  sessionComplete: false,   // true after the timer stopped itself (see totalCycles)
 }
 ```
 
@@ -27,11 +29,22 @@ Created by `createIdleState()`.
   shortBreakMs: 5 * 60 * 1000,
   longBreakMs: 15 * 60 * 1000,
   cyclesBeforeLongBreak: 4,
+  totalCycles: null, // optional limit, see below
 }
 ```
 
 Invalid settings (non-positive durations, `cyclesBeforeLongBreak` below 1 or
-non-integer) make the functions throw a clear `Error`.
+non-integer, `totalCycles` set but below 1 or non-integer) make the functions
+throw a clear `Error`.
+
+### Cycle limit (PROM-61)
+
+`totalCycles` optionally bounds the session: after the last allowed long break
+ends, the timer does **not** start another focus period — it returns to idle
+with `sessionComplete: true` (and `longBreaksCompleted` keeping the total).
+`null` (the default) means no limit: the cycle repeats forever. Both expiry
+(`advanceIfExpired`) and `skip` respect the limit. A new `start()` or
+`reset()` clears the markers.
 
 ## Time rule (important)
 
@@ -45,8 +58,11 @@ around this module.
 - `start`: idle -> focus (only from idle).
 - Focus end (expiry or skip) -> short break, except after every
   `cyclesBeforeLongBreak` completed focus periods -> long break.
-- Any break end -> focus.
-- When a long break ends, `cycleCount` returns to 0.
+- Any break end -> focus, except: when `totalCycles` is set and the long break
+  that just ended was the last allowed one, the session ends (idle +
+  `sessionComplete: true`).
+- When a long break ends, `cycleCount` returns to 0 and `longBreaksCompleted`
+  grows by 1.
 - `pause` stores the remaining time in `remainingWhenPaused`; `resume`
   continues from it (the phase end moves accordingly).
 - `advanceIfExpired` loops until the state is current (handles several phases
@@ -63,9 +79,11 @@ around this module.
   - `deepWork` / `DEEP_WORK_PRESET`: 50 min focus, 10 min short break, 20 min
     long break, long break after 3 focus periods.
 - `CUSTOM_LIMITS` — allowed ranges in minutes: focus 1–180, short break 1–60,
-  long break 1–120, focus periods before a long break 1–12.
+  long break 1–120, focus periods before a long break 1–12; focus cycles
+  before stopping 1–50 (may be left empty = no limit).
 - `validateCustomSettings(input)` — validates custom values typed by a user in
-  **minutes** (`focusMin`, `shortBreakMin`, `longBreakMin`, `cycles`).
+  **minutes** (`focusMin`, `shortBreakMin`, `longBreakMin`, `cycles`) plus the
+  cycle count `totalCycles` (1–50, empty or 0 = no limit).
   Never throws. Returns `{ valid, settings, errors }`:
   - `valid: false` → `settings` is `null` and `errors` holds one clear message
     per invalid field (empty, zero, negative, decimal, text and out-of-range
@@ -100,6 +118,7 @@ const settings = {
   shortBreakMs: 5 * 60 * 1000,
   longBreakMs: 15 * 60 * 1000,
   cyclesBeforeLongBreak: 4,
+  totalCycles: null, // or a number to stop after that many cycles
 }
 
 const t0 = 1_000_000 // any clock value (ms); the caller owns the clock

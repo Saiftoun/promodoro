@@ -15,12 +15,14 @@ test('presets have the exact specified values', () => {
     shortBreakMs: 5 * MIN,
     longBreakMs: 15 * MIN,
     cyclesBeforeLongBreak: 4,
+    totalCycles: null,
   })
   assert.deepStrictEqual(DEEP_WORK_PRESET, {
     focusMs: 50 * MIN,
     shortBreakMs: 10 * MIN,
     longBreakMs: 20 * MIN,
     cyclesBeforeLongBreak: 3,
+    totalCycles: null,
   })
   assert.deepStrictEqual(PRESETS.classic.settings, CLASSIC_PRESET)
   assert.deepStrictEqual(PRESETS.deepWork.settings, DEEP_WORK_PRESET)
@@ -32,6 +34,7 @@ test('valid custom input is accepted and converted to milliseconds', () => {
     shortBreakMin: 6,
     longBreakMin: 20,
     cycles: 5,
+    totalCycles: 2,
   })
   assert.strictEqual(result.valid, true)
   assert.deepStrictEqual(result.errors, {})
@@ -40,6 +43,7 @@ test('valid custom input is accepted and converted to milliseconds', () => {
     shortBreakMs: 6 * MIN,
     longBreakMs: 20 * MIN,
     cyclesBeforeLongBreak: 5,
+    totalCycles: 2,
   })
   // Never throws, and never mutates the input
   const input = { focusMin: 10, shortBreakMin: 2, longBreakMin: 5, cycles: 4 }
@@ -55,6 +59,7 @@ test('boundary values are accepted (min and max)', () => {
     shortBreakMin: 1,
     longBreakMin: 1,
     cycles: 1,
+    totalCycles: 1,
   })
   assert.strictEqual(min.valid, true)
   assert.deepStrictEqual(min.settings, {
@@ -62,6 +67,7 @@ test('boundary values are accepted (min and max)', () => {
     shortBreakMs: 1 * MIN,
     longBreakMs: 1 * MIN,
     cyclesBeforeLongBreak: 1,
+    totalCycles: 1,
   })
 
   const max = validateCustomSettings({
@@ -69,6 +75,7 @@ test('boundary values are accepted (min and max)', () => {
     shortBreakMin: 60,
     longBreakMin: 120,
     cycles: 12,
+    totalCycles: 50,
   })
   assert.strictEqual(max.valid, true)
   assert.deepStrictEqual(max.settings, {
@@ -76,6 +83,7 @@ test('boundary values are accepted (min and max)', () => {
     shortBreakMs: 60 * MIN,
     longBreakMs: 120 * MIN,
     cyclesBeforeLongBreak: 12,
+    totalCycles: 50,
   })
 })
 
@@ -192,5 +200,54 @@ test('each error message names what is allowed', () => {
   assert.strictEqual(
     result3.errors.cycles,
     'Focus periods before a long break must be a whole number from 1 to 12 minutes.',
+  )
+})
+
+test('totalCycles may be empty: empty means no limit (null)', () => {
+  for (const empty of ['', '   ', undefined, null]) {
+    const result = validateCustomSettings({
+      focusMin: 25,
+      shortBreakMin: 5,
+      longBreakMin: 15,
+      cycles: 4,
+      totalCycles: empty,
+    })
+    assert.strictEqual(result.valid, true, `totalCycles = ${JSON.stringify(empty)}`)
+    assert.strictEqual(result.settings.totalCycles, null)
+  }
+})
+
+test('totalCycles = 0 explicitly means no limit', () => {
+  const result = validateCustomSettings({
+    focusMin: 25,
+    shortBreakMin: 5,
+    longBreakMin: 15,
+    cycles: 4,
+    totalCycles: 0,
+  })
+  assert.strictEqual(result.valid, true)
+  assert.strictEqual(result.settings.totalCycles, null)
+})
+
+test('invalid totalCycles values are rejected with a clear message', () => {
+  for (const bad of [-1, 2.5, 'abc', 51, {}]) {
+    const result = validateCustomSettings({
+      focusMin: 25,
+      shortBreakMin: 5,
+      longBreakMin: 15,
+      cycles: 4,
+      totalCycles: bad,
+    })
+    assert.strictEqual(result.valid, false, `totalCycles = ${JSON.stringify(bad)}`)
+    assert.strictEqual(result.settings, null)
+    assert.match(
+      result.errors.totalCycles,
+      /must be empty \(no limit\) or a whole number from 1 to 50\./,
+    )
+  }
+  const exact = validateCustomSettings({ totalCycles: 51 })
+  assert.strictEqual(
+    exact.errors.totalCycles,
+    'Focus cycles before stopping must be empty (no limit) or a whole number from 1 to 50.',
   )
 })
