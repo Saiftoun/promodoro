@@ -1,4 +1,4 @@
-# Timer state machine (PROM-15)
+# Timer state machine and presets (PROM-15, PROM-17)
 
 Plain ES modules, zero dependencies. The same logic can run in the frontend and
 later on the backend (the authority for the timer). No presets, no UI, no
@@ -53,6 +53,26 @@ around this module.
   having expired, e.g. a server that was offline) and carries the exact phase
   boundaries over; it does nothing while paused and nothing while idle.
 
+## Presets and custom settings (PROM-17)
+
+`presets.js` (same rules: no dependencies, no clock reads, pure) provides:
+
+- `PRESETS` — named presets as plain settings objects:
+  - `classic` / `CLASSIC_PRESET`: 25 min focus, 5 min short break, 15 min long
+    break, long break after 4 focus periods.
+  - `deepWork` / `DEEP_WORK_PRESET`: 50 min focus, 10 min short break, 20 min
+    long break, long break after 3 focus periods.
+- `CUSTOM_LIMITS` — allowed ranges in minutes: focus 1–180, short break 1–60,
+  long break 1–120, focus periods before a long break 1–12.
+- `validateCustomSettings(input)` — validates custom values typed by a user in
+  **minutes** (`focusMin`, `shortBreakMin`, `longBreakMin`, `cycles`).
+  Never throws. Returns `{ valid, settings, errors }`:
+  - `valid: false` → `settings` is `null` and `errors` holds one clear message
+    per invalid field (empty, zero, negative, decimal, text and out-of-range
+    values are all rejected; the message says what is allowed).
+  - `valid: true` → `settings` is the validated input converted to the
+    milliseconds settings shape above, and `errors` is empty.
+
 ## API
 
 | Function | Description |
@@ -98,3 +118,5 @@ npm test
 ```
 
 Uses Node's built-in test runner (`node --test`) — no extra dependencies.
+Covers the state machine (`timer.test.js`) and the presets/custom validation
+(`presets.test.js`).
