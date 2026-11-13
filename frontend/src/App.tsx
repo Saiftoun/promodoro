@@ -1,35 +1,36 @@
-import { useState } from 'react'
-import Timer from './Timer'
-import SettingsPanel from './SettingsPanel'
-import { CLASSIC_PRESET } from '@shared/timer/presets.js'
-import type { Settings } from './timerTypes.js'
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import NavBar from './components/NavBar.js'
+import { ProtectedRoute, PublicOnlyRoute } from './routes/routeGuards.js'
+import TimerPage from './pages/TimerPage.js'
+import LoginPage from './pages/LoginPage.js'
+import SignupPage from './pages/SignupPage.js'
+import RoomsPage from './pages/RoomsPage.js'
 
-export default function App() {
-  // TEMPORARY TEST VALUES (do not commit): to test a full cycle in about a
-  // minute, replace the line below with:
-  //   useState<Settings>({ focusMs: 20_000, shortBreakMs: 5_000, longBreakMs: 10_000, cyclesBeforeLongBreak: 2 })
-  const [settings, setSettings] = useState<Settings>(CLASSIC_PRESET)
-  const [timerIdle, setTimerIdle] = useState(true)
-
+function Layout() {
   return (
-    <main>
-      <h1>FocusRoom</h1>
-      <SettingsSummary settings={settings} />
-      <SettingsPanel onApply={setSettings} locked={!timerIdle} />
-      <Timer settings={settings} onIdleChange={setTimerIdle} />
-    </main>
+    <>
+      <NavBar />
+      <main>
+        <Outlet />
+      </main>
+    </>
   )
 }
 
-function SettingsSummary({ settings }: { settings: Settings }) {
-  const focus = Math.round(settings.focusMs / 60000)
-  const short = Math.round(settings.shortBreakMs / 60000)
-  const long = Math.round(settings.longBreakMs / 60000)
-  const cycles = settings.cyclesBeforeLongBreak
+export default function App() {
   return (
-    <p className="settings-summary" aria-live="polite">
-      {focus} min focus, {short} min break, {long} min long break every {cycles}{' '}
-      session{cycles === 1 ? '' : 's'}
-    </p>
+    <Routes>
+      <Route element={<Layout />}>
+        <Route path="/" element={<TimerPage />} />
+        <Route element={<PublicOnlyRoute />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+        </Route>
+        <Route element={<ProtectedRoute />}>
+          <Route path="/rooms/:roomId" element={<RoomsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
   )
 }
