@@ -52,7 +52,9 @@ export default function Timer({ settings, onIdleChange }: TimerProps) {
   const running = state.phase !== PHASES.IDLE
   const remaining = getRemaining(state, Date.now())
   const timeText = running ? formatMs(remaining) : formatMs(settings.focusMs)
-  const phaseLabel = PHASE_LABELS[state.phase]
+  const phaseLabel = state.sessionComplete
+    ? 'Session complete'
+    : PHASE_LABELS[state.phase]
 
   const focusMinutes = Math.round(settings.focusMs / 60000)
   const shortBreakMinutes = Math.round(settings.shortBreakMs / 60000)
@@ -147,7 +149,7 @@ export default function Timer({ settings, onIdleChange }: TimerProps) {
         {timeText}
       </p>
       <p className="timer-cycle">
-        {formatCycle(state, settings.cyclesBeforeLongBreak)}
+        {formatCycle(state, settings)}
       </p>
       <div className="timer-actions">
         {state.phase === PHASES.IDLE && (
@@ -218,14 +220,19 @@ function TimerNotes({
 }
 
 function formatCycle(
-  state: { phase: string; cycleCount: number },
-  cyclesBeforeLongBreak: number,
+  state: { phase: string; cycleCount: number; sessionComplete: boolean },
+  settings: { cyclesBeforeLongBreak: number; totalCycles: number | null },
 ): string {
+  if (state.sessionComplete && settings.totalCycles !== null) {
+    return `All ${settings.totalCycles} focus ${
+      settings.totalCycles === 1 ? 'cycle' : 'cycles'
+    } finished — well done!`
+  }
   if (state.phase === PHASES.IDLE) {
-    return `Focus session 1 of ${cyclesBeforeLongBreak}`
+    return `Focus session 1 of ${settings.cyclesBeforeLongBreak}`
   }
   if (state.phase === PHASES.FOCUS) {
-    return `Focus session ${state.cycleCount + 1} of ${cyclesBeforeLongBreak}`
+    return `Focus session ${state.cycleCount + 1} of ${settings.cyclesBeforeLongBreak}`
   }
-  return `${state.cycleCount} of ${cyclesBeforeLongBreak} focus sessions completed`
+  return `${state.cycleCount} of ${settings.cyclesBeforeLongBreak} focus sessions completed`
 }

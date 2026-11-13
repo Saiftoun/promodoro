@@ -13,6 +13,7 @@ interface CustomInput {
   shortBreakMin: string
   longBreakMin: string
   cycles: string
+  totalCycles: string
 }
 
 const EMPTY_CUSTOM_INPUT: CustomInput = {
@@ -20,6 +21,7 @@ const EMPTY_CUSTOM_INPUT: CustomInput = {
   shortBreakMin: '',
   longBreakMin: '',
   cycles: '',
+  totalCycles: '',
 }
 
 interface SettingsPanelProps {
@@ -50,7 +52,13 @@ export default function SettingsPanel({ onApply, locked }: SettingsPanelProps) {
 
   function applyCustom() {
     if (!validation.valid) {
-      setTouched({ focusMin: true, shortBreakMin: true, longBreakMin: true, cycles: true })
+      setTouched({
+        focusMin: true,
+        shortBreakMin: true,
+        longBreakMin: true,
+        cycles: true,
+        totalCycles: true,
+      })
       return
     }
     onApply(validation.settings)
@@ -105,6 +113,7 @@ export default function SettingsPanel({ onApply, locked }: SettingsPanelProps) {
               ['shortBreakMin', 'Short break (minutes)'],
               ['longBreakMin', 'Long break (minutes)'],
               ['cycles', 'Focus periods before a long break'],
+              ['totalCycles', 'Focus cycles before stopping'],
             ] as [keyof CustomInput, string][]
           ).map(([field, label]) => (
             <div className="settings-field" key={field}>
@@ -116,6 +125,7 @@ export default function SettingsPanel({ onApply, locked }: SettingsPanelProps) {
                 min={CUSTOM_LIMITS[field].min}
                 max={CUSTOM_LIMITS[field].max}
                 step={1}
+                placeholder={field === 'totalCycles' ? 'No limit' : undefined}
                 value={custom[field]}
                 onChange={(event) => updateCustom(field, event.target.value)}
                 aria-invalid={showError(field, custom, touched)}
