@@ -11,16 +11,6 @@ import {
 } from '@shared/timer/timer.js'
 import type { Settings } from './timerTypes.js'
 
-// Classic settings (presets and custom durations are PROM-17).
-// TEMPORARY TEST VALUES (uncommitted): to test a full cycle in about a minute
-// use { focusMs: 20_000, shortBreakMs: 5_000, longBreakMs: 10_000, cyclesBeforeLongBreak: 2 }
-const CLASSIC_SETTINGS: Settings = {
-  focusMs: 25 * 60 * 1000,
-  shortBreakMs: 5 * 60 * 1000,
-  longBreakMs: 15 * 60 * 1000,
-  cyclesBeforeLongBreak: 4,
-}
-
 const PHASE_LABELS: Record<string, string> = {
   [PHASES.IDLE]: 'Ready',
   [PHASES.FOCUS]: 'Focus',
@@ -35,31 +25,29 @@ function formatMs(ms: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-function formatCycle(state: { phase: string; cycleCount: number }): string {
-  const total = CLASSIC_SETTINGS.cyclesBeforeLongBreak
-  if (state.phase === PHASES.IDLE) {
-    return `Focus session 1 of ${total}`
-  }
-  if (state.phase === PHASES.FOCUS) {
-    return `Focus session ${state.cycleCount + 1} of ${total}`
-  }
-  return `${state.cycleCount} of ${total} focus sessions completed`
+interface TimerProps {
+  settings: Settings
+  onIdleChange: (idle: boolean) => void
 }
 
-export default function Timer() {
+export default function Timer({ settings, onIdleChange }: TimerProps) {
   const [state, setState] = useState(createIdleState)
 
   const running = state.phase !== PHASES.IDLE
   const remaining = getRemaining(state, Date.now())
-  const timeText = running ? formatMs(remaining) : formatMs(CLASSIC_SETTINGS.focusMs)
+  const timeText = running ? formatMs(remaining) : formatMs(settings.focusMs)
   const phaseLabel = PHASE_LABELS[state.phase]
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      setState((current) => advanceIfExpired(current, CLASSIC_SETTINGS, Date.now()))
+      setState((current) => advanceIfExpired(current, settings, Date.now()))
     }, 250)
     return () => clearInterval(intervalId)
-  }, [])
+  }, [settings])
+
+  useEffect(() => {
+    onIdleChange(state.phase === PHASES.IDLE)
+  }, [state.phase, onIdleChange])
 
   useEffect(() => {
     document.title = running ? `${timeText} ${phaseLabel}` : 'FocusRoom'
@@ -71,10 +59,10 @@ export default function Timer() {
       <p className="timer-time" role="timer" aria-live="off">
         {timeText}
       </p>
-      <p className="timer-cycle">{formatCycle(state)}</p>
+      <p className="timer-cycle">{formatCycle(state, settings.cyclesBeforeLongBreak)}</p>
       <div className="timer-actions">
         {state.phase === PHASES.IDLE && (
-          <button type="button" onClick={() => setState((s) => start(s, CLASSIC_SETTINGS, Date.now()))}>
+          <button type="button" onClick={() => setState((s) => start(s, settings, Date.now()))}>
             Start
           </button>
         )}
@@ -96,4 +84,17 @@ export default function Timer() {
       </div>
     </section>
   )
+}
+
+function formatCycle(
+  state: { phase: string; cycleCount: number },
+  cyclesBeforeLongBreak: number,
+): string {
+  if (state.phase === PHASES.IDLE) {
+    return `Focus session 1 of ${cyclesBeforeLongBreak}`
+  }
+  if (state.phase === PHASES.FOCUS) {
+    return `Focus session ${state.cycleCount + 1} of ${cyclesBeforeLongBreak}`
+  }
+  return `${state.cycleCount} of ${cyclesBeforeLongBreak} focus sessions completed`
 }
