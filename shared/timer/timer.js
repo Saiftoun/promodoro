@@ -10,6 +10,9 @@ export const DEFAULT_SETTINGS = {
   shortBreakMs: 5 * 60 * 1000,
   longBreakMs: 15 * 60 * 1000,
   cyclesBeforeLongBreak: 4,
+  // Total number of focus cycles (a cycle ends with a long break) after
+  // which the timer stops. null = no limit: the cycle repeats forever.
+  totalCycles: null,
 }
 
 /**
@@ -23,6 +26,11 @@ export function createIdleState() {
     paused: false,
     remainingWhenPaused: null,
     cycleCount: 0,
+    longBreaksCompleted: 0,
+    // true when the timer reached the end of the last allowed cycle
+    // (settings.totalCycles) and stopped by itself. reset() or a new
+    // start() clears it.
+    sessionComplete: false,
   }
 }
 
@@ -42,7 +50,7 @@ export function normalizeSettings(settings) {
       )
     }
   }
-  const { cyclesBeforeLongBreak } = settings
+  const { cyclesBeforeLongBreak, totalCycles } = settings
   if (
     !Number.isInteger(cyclesBeforeLongBreak) ||
     cyclesBeforeLongBreak < 1
@@ -51,11 +59,21 @@ export function normalizeSettings(settings) {
       `Invalid settings: cyclesBeforeLongBreak must be an integer of at least 1 (got ${cyclesBeforeLongBreak}).`,
     )
   }
+  if (
+    totalCycles !== undefined &&
+    totalCycles !== null &&
+    (!Number.isInteger(totalCycles) || totalCycles < 1)
+  ) {
+    throw new Error(
+      `Invalid settings: totalCycles must be null (no limit) or an integer of at least 1 (got ${totalCycles}).`,
+    )
+  }
   return {
     focusMs: settings.focusMs,
     shortBreakMs: settings.shortBreakMs,
     longBreakMs: settings.longBreakMs,
     cyclesBeforeLongBreak: settings.cyclesBeforeLongBreak,
+    totalCycles: totalCycles === undefined ? null : totalCycles,
   }
 }
 
@@ -92,6 +110,8 @@ export function start(state, settings, now) {
     paused: false,
     remainingWhenPaused: null,
     cycleCount: 0,
+    longBreaksCompleted: 0,
+    sessionComplete: false,
   }
 }
 
@@ -157,7 +177,26 @@ function transitionToNext(state, settings, nextStartedAt) {
     }
   }
 
-  // Any break -> focus. A long break ends the cycle: cycleCount resets to 0.
+  // Any break -> focus. A long break ends the cycle: cycleCount resets to 0
+  // and the completed-cycle count grows. When the settings set totalCycles
+  // and this long break was the last allowed one, the session ends: the
+  // timer returns to idle with sessionComplete = true instead of starting
+  // another focus period.
+  const completedCycles =
+    state.phase === PHASES.LONG_BREAK
+      ? state.longBreaksCompleted + 1
+      : state.longBreaksCompleted
+  if (
+    state.phase === PHASES.LONG_BREAK &&
+    valid.totalCycles !== null &&
+    completedCycles >= valid.totalCycles
+  ) {
+    return {
+      ...createIdleState(),
+      longBreaksCompleted: completedCycles,
+      sessionComplete: true,
+    }
+  }
   const cycleCount =
     state.phase === PHASES.LONG_BREAK ? 0 : state.cycleCount
   return {
@@ -168,6 +207,7 @@ function transitionToNext(state, settings, nextStartedAt) {
     paused: false,
     remainingWhenPaused: null,
     cycleCount,
+    longBreaksCompleted: completedCycles,
   }
 }
 

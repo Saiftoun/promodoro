@@ -22,6 +22,7 @@ const CLASSIC = {
   shortBreakMs: 5 * MIN,
   longBreakMs: 15 * MIN,
   cyclesBeforeLongBreak: 4,
+  totalCycles: null,
 }
 
 function assertNotMutated(original, result) {
@@ -37,6 +38,8 @@ test('createIdleState returns the documented idle shape', () => {
     paused: false,
     remainingWhenPaused: null,
     cycleCount: 0,
+    longBreaksCompleted: 0,
+    sessionComplete: false,
   })
 })
 
@@ -45,6 +48,28 @@ test('normalizeSettings accepts valid settings and returns a copy', () => {
   assert.deepStrictEqual(copy, CLASSIC)
   assert.notStrictEqual(copy, CLASSIC)
   assert.deepStrictEqual(normalizeSettings(DEFAULT_SETTINGS), DEFAULT_SETTINGS)
+})
+
+test('normalizeSettings accepts totalCycles as null, undefined or a positive integer', () => {
+  assert.deepStrictEqual(
+    normalizeSettings({ ...CLASSIC, totalCycles: 3 }),
+    { ...CLASSIC, totalCycles: 3 },
+  )
+  // undefined is treated as null (no limit)
+  assert.deepStrictEqual(
+    normalizeSettings({ ...CLASSIC, totalCycles: undefined }),
+    { ...CLASSIC, totalCycles: null },
+  )
+})
+
+test('normalizeSettings rejects invalid totalCycles', () => {
+  for (const bad of [0, -1, 2.5, '3', NaN]) {
+    assert.throws(
+      () => normalizeSettings({ ...CLASSIC, totalCycles: bad }),
+      /totalCycles/,
+      `totalCycles = ${bad}`,
+    )
+  }
 })
 
 test('full classic cycle 25/5 with long break after 4 focus periods', () => {
@@ -337,4 +362,77 @@ test('skipping through a whole cycle respects cyclesBeforeLongBreak = 2', () => 
   state = skip(state, settings, 4 * MIN) // long -> focus, cycleCount 0
   assert.strictEqual(state.phase, PHASES.FOCUS)
   assert.strictEqual(state.cycleCount, 0)
+})
+
+test('totalCycles = null keeps the infinite cycle behavior', () => {
+  const settings = { ...CLASSIC, cyclesBeforeLongBreak: 2, totalCycles: null }
+  let state = start(createIdleState(), settings, 0)
+  // Three full cycles (3 long breaks) in a row: the timer never stops.
+  for (let cycle = 1; cycle <= 3; cycle += 1) {
+    state = skip(state, settings, cycle * MIN) // focus -> short (1)
+    assert.strictEqual(state.phase, PHASES.SHORT_BREAK)
+    state = skip(state, settings, cycle * MIN) // short -> focus
+    state = skip(state, settings, cycle * MIN) // focus -> long break (2)
+    assert.strictEqual(state.phase, PHASES.LONG_BREAK)
+    assert.strictEqual(state.longBreaksCompleted, cycle - 1)
+    state = skip(state, settings, cycle * MIN) // long break -> focus
+    assert.strictEqual(state.phase, PHASES.FOCUS)
+    assert.strictEqual(state.cycleCount, 0)
+    assert.strictEqual(state.longBreaksCompleted, cycle)
+  }
+  assert.strictEqual(state.sessionComplete, false)
+})
+
+test('advanceIfExpired stops after the last allowed cycle (totalCycles = 2)', () => {
+  const settings = { ...CLASSIC, cyclesBeforeLongBreak: 2, totalCycles: 2 }
+  let state = start(createIdleState(), settings, 0)
+
+  // First cycle: focus 0-25, short 25-30, focus 30-55, long 55-70.
+  state = advanceIfExpired(state, settings, 70 * MIN)
+  assert.strictEqual(state.phase, PHASES.FOCUS)
+  assert.strictEqual(state.longBreaksCompleted, 1)
+  assert.strictEqual(state.cycleCount, 0)
+  assert.strictEqual(state.sessionComplete, false)
+
+  // Second cycle: focus 70-95, short 95-100, focus 100-125, long 125-140.
+  // The second long break ends the session: back to idle, marked complete.
+  state = advanceIfExpired(state, settings, 140 * MIN)
+  assert.strictEqual(state.phase, PHASES.IDLE)
+  assert.strictEqual(state.sessionComplete, true)
+  assert.strictEqual(state.longBreaksCompleted, 2)
+  assert.strictEqual(state.cycleCount, 0)
+  assert.strictEqual(state.phaseStartedAt, null)
+  assert.strictEqual(getRemaining(state, 140 * MIN), 0)
+
+  // Nothing happens afterwards: the session stays complete.
+  const later = advanceIfExpired(state, settings, 1000 * MIN)
+  assert.deepStrictEqual(later, state)
+})
+
+test('skipping the final long break also stops the session', () => {
+  const settings = { ...CLASSIC, cyclesBeforeLongBreak: 2, totalCycles: 1 }
+  let state = start(createIdleState(), settings, 0)
+  state = skip(state, settings, MIN) // focus -> short (1)
+  state = skip(state, settings, 2 * MIN) // short -> focus
+  state = skip(state, settings, 3 * MIN) // focus -> long break (2)
+  assert.strictEqual(state.phase, PHASES.LONG_BREAK)
+  state = skip(state, settings, 4 * MIN) // the only allowed long break ends
+  assert.strictEqual(state.phase, PHASES.IDLE)
+  assert.strictEqual(state.sessionComplete, true)
+  assert.strictEqual(state.longBreaksCompleted, 1)
+
+  // A completed session can be started again: the markers are cleared.
+  const restarted = start(state, settings, 4 * MIN)
+  assert.strictEqual(restarted.phase, PHASES.FOCUS)
+  assert.strictEqual(restarted.sessionComplete, false)
+  assert.strictEqual(restarted.longBreaksCompleted, 0)
+})
+
+test('reset clears the session-complete markers', () => {
+  const settings = { ...CLASSIC, cyclesBeforeLongBreak: 1, totalCycles: 1 }
+  let state = start(createIdleState(), settings, 0)
+  state = skip(state, settings, MIN) // focus -> long break
+  state = skip(state, settings, 2 * MIN) // long break -> session complete
+  assert.strictEqual(state.sessionComplete, true)
+  assert.deepStrictEqual(reset(), createIdleState())
 })
